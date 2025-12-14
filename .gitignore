@@ -1,0 +1,13 @@
+# Dépendances Node
+/ws-server/node_modules
+/ws-server/package-lock.json
+/ws-server/package.json
+
+# Fichiers de log, logs de NPM
+#npm-debug.log*
+#.npm
+
+# Fichiers de build ou temporaires (ajustez selon votre configuration)
+#dist/
+#build/
+#.env
