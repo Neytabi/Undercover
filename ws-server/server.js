@@ -217,6 +217,41 @@ app.post('/internal/start_game', async (req, res) => {
   }
 });
 
+// ... (code existant, après les autres app.post)
+
+app.post('/internal/game_reset', (req, res) => {
+  try {
+    const { room_id, secret } = req.body || {};
+    
+    // Vérification de sécurité (comme pour les autres endpoints)
+    const ip = req.ip || req.socket.remoteAddress || '';
+    const fromLocalhost = ip.includes('127.0.0.1') || ip.includes('::1') || req.hostname === 'localhost';
+
+    if (secret !== NODE_SHARED_SECRET && !fromLocalhost) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (!room_id) return res.status(400).json({ error: 'room_id manquant' });
+
+    // Broadcast à tous les joueurs de la room que la partie recommence
+    broadcast(room_id, {
+      type: 'game_reset',
+      message: 'La partie recommence !',
+      redirect_url: `waiting_room.php?room_id=${room_id}` // Redirection automatique
+    });
+
+    console.log(`Reset game broadcast pour room ${room_id}`);
+    
+    // On nettoie les timers de jeu s'il y en avait
+    clearRoomTimer(room_id);
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Erreur /internal/game_reset:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ... (suite du code wss.on)
 
 wss.on('connection', (ws) => {
   ws.on('message', async (msg) => {
