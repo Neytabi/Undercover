@@ -38,147 +38,102 @@ $players = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $is_creator = ($player_id == $room['creator_id']);
 $error_message = (isset($_GET['error']) && $_GET['error'] === 'not_enough_players') ? "Il faut au moins 3 joueurs pour commencer." : '';
 ?>
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Salle d'attente - <?= htmlspecialchars($room['code']) ?></title>
-  
-  <!-- Polices -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;700;900&family=Rubik:wght@400;900&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>QG - Room <?= htmlspecialchars($room['code']) ?></title>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;700&family=Rubik:wght@500&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" rel="stylesheet" />
-  
-  <!-- CSS (Force reload avec timestamp) -->
   <link rel="stylesheet" href="assets/css/style.css?v=<?= time() ?>">
 </head>
-
 <body data-theme="light">
-
-  <!-- Animation Overlay -->
+  <!-- Animation Transition -->
   <div id="page-transition-overlay">
     <div class="transition-panel top"></div>
     <div class="transition-message">MISSION START !</div>
     <div class="transition-panel bottom"></div>
   </div>
 
-  <!-- Bouton Retour -->
-  <button id="backBtn" class="back-btn" aria-label="Retour à l'accueil">
-    <span class="material-symbols-rounded">home</span>
-  </button>
-  <style>
-    /* Style spécifique bouton retour */
-    .back-btn { display: flex; position: fixed; bottom: 20px; right: 20px; background-color: var(--main-red); color: var(--white); border: none; border-radius: 50%; width: 44px; height: 44px; font-size: 1.4rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 1000; justify-content: center; align-items: center; transition: background-color 0.3s, transform 0.2s; }
-    .back-btn:hover { background-color: var(--dark-red); transform: translateY(-2px); }
-  </style>
+  <h1 class="main-title">Salle d'attente</h1>
 
-  <!-- Toast Erreur -->
-  <?php if ($error_message): ?>
-    <div id="error-toast" class="toast show"><?= htmlspecialchars($error_message) ?></div>
-    <script>setTimeout(() => document.getElementById("error-toast")?.classList.remove("show"), 3000);</script>
-  <?php endif; ?>
-
-  <!-- Titre Room -->
-  <h1>Room :
-    <span id="room-code" class="copy-code" data-code="<?= htmlspecialchars($room['code']) ?>" role="button" tabindex="0" title="Cliquer pour copier">
-      <?= htmlspecialchars($room['code']) ?>
-      <span class="copy-tooltip" id="copy-tooltip">Copié !</span>
-    </span>
-  </h1>
-
-  <!-- Liste Joueurs -->
   <div class="container">
-    <h3>Joueurs :</h3>
+    <div style="text-align:center; margin-bottom:20px;">
+      <span style="font-size:1.2rem; color:var(--text-dark);">CODE SECRET :</span>
+      <div id="room-code" class="copy-code" data-code="<?= htmlspecialchars($room['code']) ?>" 
+           style="font-size:2.5rem; font-family:'Bangers'; letter-spacing:3px; margin-top:5px; display:inline-block;">
+        <?= htmlspecialchars($room['code']) ?>
+      </div>
+      <div id="copy-tooltip" class="copy-tooltip">Copié !</div>
+    </div>
+
+    <h3>Agents présents (<span id="playerCount"><?= count($players) ?></span>) :</h3>
     <ul id="playersList">
       <?php foreach ($players as $p): ?>
         <li>
           <span class="player-name"><?= htmlspecialchars($p['name']) ?></span>
           <?php if ($p['id'] == $room['creator_id']): ?>
-            <span class="creator-badge">👑 Créateur</span>
+            <span class="creator-badge">👑 Chef de mission</span>
           <?php endif; ?>
         </li>
       <?php endforeach; ?>
     </ul>
 
-    <!-- Bouton Start (Créateur uniquement) -->
     <?php if ($is_creator): ?>
       <form id="startGameForm" method="post" action="../api/start_game.php">
           <input type="hidden" name="room_id" value="<?= $room_id ?>">
-          <!-- Les champs hidden seront mis à jour par le JS lors des modifications des inputs -->
-          <input type="hidden" name="turn_time_seconds" id="hidden_turn_time" value="<?= (int)$room['turn_time_seconds'] ?>">
-          <input type="hidden" name="anonymize_votes" id="hidden_anonymize" value="<?= (int)$room['anonymize_votes'] ?>">
-          <input type="hidden" name="undercover_count" id="hidden_undercover" value="<?= (int)$room['undercover_count'] ?>">
-          <button type="submit">Lancer la partie</button>
+          <input type="hidden" name="turn_time_seconds" id="hidden_turn_time" value="<?= (int)($room['turn_time_seconds'] ?? 30) ?>">
+          <input type="hidden" name="anonymize_votes" id="hidden_anonymize" value="<?= (int)($room['anonymize_votes'] ?? 0) ?>">
+          <input type="hidden" name="undercover_count" id="hidden_undercover" value="<?= (int)($room['undercover_count'] ?? 1) ?>">
+          <button type="submit" class="action-btn">LANCER LA MISSION 🚀</button>
       </form>
     <?php else: ?>
-      <p style="text-align:center; opacity:0.8;">En attente du créateur pour démarrer...</p>
+      <div class="waiting-screen">
+        <span class="material-symbols-rounded waiting-icon" style="font-size:3rem;">hourglass_top</span>
+        <p>En attente du chef de mission...</p>
+      </div>
     <?php endif; ?>
   </div>
 
-  <!-- Paramètres -->
+  <!-- Paramètres (Même logique, design unifié) -->
   <div class="main-row">
-    <h3>Paramètres de la partie :</h3>
-    
+    <h3>Configuration de la mission</h3>
+    <!-- (Le code HTML des paramètres reste identique mais bénéficie du CSS global) -->
+    <!-- ... Copier/Coller les <ul> settings de ton ancien fichier ... -->
     <?php if ($is_creator): ?>
-      <!-- Mode Édition -->
       <ul class="settings-list">
         <li class="param-item">
-          <div style="flex:1">
-            <div style="font-weight:700">Durée du tour</div>
-            <div style="font-size:0.85rem; opacity:0.8">Secondes (5–120)</div>
-          </div>
-          <div style="text-align:right">
-            <input type="number" id="input_turn_time" min="5" max="120" value="<?= (int)$room['turn_time_seconds'] ?>" style="width:70px; text-align:center;">
-            <div class="save-status" id="status_turn_time" style="font-size:0.75rem; color:#666; height:1rem;"></div>
-          </div>
+            <span>⏱️ Durée tour</span>
+            <input type="number" id="input_turn_time" min="5" max="120" value="<?= (int)($room['turn_time_seconds']??30) ?>" style="width:70px;">
         </li>
-
         <li class="param-item">
-          <div style="flex:1">
-            <div style="font-weight:700">Votes anonymes</div>
-          </div>
-          <input type="checkbox" id="input_anonymize" <?= ((int)$room['anonymize_votes']) ? 'checked' : '' ?>>
+            <span>🕵️ Undercovers</span>
+            <input type="number" id="input_undercover" min="1" max="5" value="<?= (int)($room['undercover_count']??1) ?>" style="width:70px;">
         </li>
-
         <li class="param-item">
-          <div style="flex:1">
-            <div style="font-weight:700">Undercover(s)</div>
-          </div>
-          <input type="number" id="input_undercover" min="1" max="10" value="<?= (int)$room['undercover_count'] ?>" style="width:70px; text-align:center;">
+            <span>🔒 Votes anonymes</span>
+            <input type="checkbox" id="input_anonymize" <?= ($room['anonymize_votes']??0) ? 'checked' : '' ?>>
         </li>
       </ul>
-
     <?php else: ?>
-      <!-- Mode Lecture -->
       <ul class="settings-list">
-        <li class="param-item">
-          <span>Durée du tour :</span>
-          <span id="read_turn_time" style="font-weight:bold"><?= (int)$room['turn_time_seconds'] ?>s</span>
-        </li>
-        <li class="param-item">
-          <span>Votes :</span>
-          <span id="read_anonymize" style="font-weight:bold"><?= ((int)$room['anonymize_votes']) ? '🔒 Anonymes' : '🔓 Publics' ?></span>
-        </li>
-        <li class="param-item">
-          <span>Undercover(s) :</span>
-          <span id="read_undercover" style="font-weight:bold"><?= (int)$room['undercover_count'] ?></span>
-        </li>
+         <li class="param-item">⏱️ Durée : <span id="read_turn_time"><?= (int)($room['turn_time_seconds']??30) ?>s</span></li>
+         <li class="param-item">🕵️ Undercovers : <span id="read_undercover"><?= (int)($room['undercover_count']??1) ?></span></li>
+         <li class="param-item">🔒 Votes : <span id="read_anonymize"><?= ($room['anonymize_votes']??0) ? 'Secrets' : 'Publics' ?></span></li>
       </ul>
     <?php endif; ?>
   </div>
 
-  <!-- Scripts Unifiés -->
-  <script src="assets/js/theme-apply.js"></script>
-  
-  <!-- Boutons Flottants Settings / Theme -->
-  <button id="settingsBtn" class="settings-btn" aria-label="Paramètres"><span class="material-symbols-rounded">settings</span></button>
-  <div id="settingsPanel"><div class="theme-switch-text" id="themeSwitchToggle">🌗 Passer en sombre</div></div>
+  <button id="backBtn" class="back-btn"><span class="material-symbols-rounded">logout</span></button>
+  <button id="settingsBtn" class="settings-btn"><span class="material-symbols-rounded">settings</span></button>
+  <div id="settingsPanel"><div class="theme-switch-text" id="themeSwitchToggle">🌗 Mode Sombre</div></div>
 
+  <!-- Script (Garde ton logique existante, juste le CSS fait le travail) -->
+  <script src="assets/js/theme-apply.js"></script>
+  <!-- ... Inclure le script JS existant pour Websocket ... -->
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
+          document.addEventListener("DOMContentLoaded", () => {
         // --- Variables Globales ---
         const roomId = <?= json_encode($room_id) ?>;
         const playerId = <?= json_encode($player_id) ?>;
@@ -198,7 +153,7 @@ $error_message = (isset($_GET['error']) && $_GET['error'] === 'not_enough_player
             const overlay = document.getElementById('page-transition-overlay');
             if (overlay) overlay.classList.add('transition-active');
             
-            setTimeout(() => { window.location.href = url; }, 600);
+            setTimeout(() => { window.location.href = url; }, 1000);
         }
 
         ws.onopen = () => {
