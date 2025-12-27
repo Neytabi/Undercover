@@ -1,8 +1,8 @@
 <?php
 session_start();
-// ... (Logique PHP) ...
 $data = $_SESSION['vote_results'] ?? null;
-if(!$data) die("Pas de résultats");
+if (!$data) die("Accès interdit.");
+
 $players = $data['players'];
 $voteCount = $data['vote_count'];
 $eliminated = $data['eliminated'];
@@ -13,53 +13,66 @@ arsort($voteCount);
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-    <title>Verdict</title>
-    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;700&family=Rubik:wght@500&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Le Verdict - Undercover</title>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css?v=<?= time() ?>">
 </head>
 <body data-theme="light">
 
-    <h1 class="main-title">Le Verdict</h1>
+    <h1 class="main-title">Rapport d'Élimination</h1>
 
     <div class="container">
+        <h2 style="margin-top: 0; text-align:center;">Dépouillement des votes</h2>
+        
         <div class="results-grid">
             <?php foreach ($players as $id => $name): ?>
                 <?php $count = $voteCount[$id] ?? 0; ?>
-                <!-- L'ID player-X sert au JS pour ajouter la classe .eliminated -->
                 <div class="player-card" id="player-<?= $id ?>">
                     <div class="stamp-overlay">ÉLIMINÉ</div>
-                    <span style="font-family:'Rubik'; font-weight:bold; font-size:1.2rem;"><?= htmlspecialchars($name) ?></span>
+                    <span class="player-name"><?= htmlspecialchars($name) ?></span>
                     <div class="vote-badge"><?= $count ?> vote<?= $count > 1 ? 's' : '' ?></div>
                 </div>
             <?php endforeach; ?>
         </div>
 
-        <div id="progress" class="loader-bar"></div>
-        <p style="text-align:center; margin-top:10px; opacity:0.7;">Analyse en cours...</p>
+        <div class="loading-zone">
+            <div id="progress" class="loader-bar"></div>
+            <p id="status-text">Calcul des conséquences...</p>
+        </div>
     </div>
 
+    <script src="assets/js/theme-apply.js"></script>
     <script>
-        // ... Ton script JS existant pour l'animation d'élimination ...
-        // Le CSS s'occupe de l'animation 'shake' et 'stampIn'
         const eliminatedIds = <?= json_encode($eliminated) ?>;
+        const roomId = "<?= $room_id ?>";
         const revealDelay = 1500;
-        
-        function revealElimination() {
-            eliminatedIds.forEach((id, index) => {
+        const nextStepDelay = 3000;
+
+        function startReveal() {
+            eliminatedIds.forEach((id, i) => {
                 setTimeout(() => {
                     const card = document.getElementById('player-' + id);
-                    if (card) card.classList.add('eliminated'); // Déclenche le CSS
-                }, revealDelay * (index + 1));
+                    if (card) card.classList.add('eliminated');
+                    if (i === eliminatedIds.length - 1) {
+                        document.getElementById('status-text').textContent = "Mise à jour de la mission...";
+                    }
+                }, revealDelay * (i + 1));
             });
         }
-        revealElimination();
-        
-        // Redirection
+
+        startReveal();
+
+        const totalTime = (eliminatedIds.length * revealDelay) + nextStepDelay;
+        const bar = document.getElementById('progress');
         setTimeout(() => {
-            window.location.href = "/api/next_round.php?room_id=<?= $room_id ?>";
-        }, (eliminatedIds.length * revealDelay) + 4000);
+            bar.style.transition = `width ${totalTime}ms linear`;
+            bar.style.width = '100%';
+        }, 100);
+
+        setTimeout(() => {
+            window.location.href = "../api/next_round.php?room_id=" + roomId;
+        }, totalTime);
     </script>
-    <script src="assets/js/theme-apply.js"></script>
 </body>
 </html>

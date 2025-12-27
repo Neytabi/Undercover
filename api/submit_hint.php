@@ -4,40 +4,47 @@ require_once __DIR__ . '/../includes/db.php';
 
 header('Content-Type: application/json');
 
-$player_id = $_POST['player_id'] ?? null;
+// --- DÉBUT CORRECTION ---
+// On récupère le secret envoyé par Node (ou vide)
+$secret_recu = $_POST['secret'] ?? '';
+// Le même secret que dans server.js
+$node_secret = getenv('NODE_SHARED_SECRET') ?: 'change_me_locally';
+
+// Si le secret est bon (appel via Node), on fait confiance au POST
+// Sinon (appel via navigateur), on exige la SESSION
+if ($secret_recu === $node_secret) {
+    $player_id = $_POST['player_id'] ?? null;
+} else {
+    $player_id = $_SESSION['player_id'] ?? null;
+}
+// --- FIN CORRECTION ---
+
 $room_id = $_POST['room_id'] ?? null;
 $hint = trim($_POST['hint'] ?? '');
 
 if (!$player_id || !$room_id || !$hint) {
     http_response_code(400);
-    echo json_encode(['error' => 'Paramètres manquants']);
+    echo json_encode(['error' => 'Paramètres manquants ou session expirée']);
     exit;
 }
 
 try {
-    ini_set('display_errors', 1);
-    ini_set('display_startup_errors', 1);
-    error_reporting(E_ALL);
-
+    // ... (Le reste du code de connexion DB reste identique) ...
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    error_log("DEBUG - player_id (POST): $player_id");
-    error_log("DEBUG - room_id (POST): $room_id");
 
     // Vérifie si c’est le tour du joueur
     $stmt = $pdo->prepare("SELECT current_turn FROM rooms WHERE id = ?");
     $stmt->execute([$room_id]);
     $currentTurn = $stmt->fetchColumn();
 
-    error_log("DEBUG player_id (POST) = " . var_export($player_id, true));
-    error_log("DEBUG currentTurn (DB) = " . var_export($currentTurn, true));
-
+    // Vérification stricte
     if ((int)$currentTurn !== (int)$player_id) {
         http_response_code(403);
-        echo json_encode(['error' => 'Ce n\'est pas ton tour']);
+        echo json_encode(['error' => 'Ce n\'est pas ton tour (ou usurpation détectée)']);
         exit;
     }
 
+    // ... (Le reste de la logique d'insertion est correcte) ...
     // Vérifie que le joueur est vivant
     $stmt = $pdo->prepare("SELECT is_alive FROM players WHERE id = ? AND room_id = ?");
     $stmt->execute([$player_id, $room_id]);
@@ -45,18 +52,15 @@ try {
 
     if (!$isAlive) {
         http_response_code(403);
-        echo json_encode(['error' => 'Joueur éliminé ou non trouvé']);
+        echo json_encode(['error' => 'Joueur éliminé']);
         exit;
     }
-
-    error_log("room_id: $room_id, player_id: $player_id, hint: $hint");
 
     // Tente d’insérer l’indice
     $stmt = $pdo->prepare("INSERT INTO hints (room_id, player_id, hint, created_at) VALUES (?, ?, ?, NOW())");
     $stmt->execute([$room_id, $player_id, $hint]);
 
-    error_log("Indice inséré avec succès");
-
+    // ... (Calcul du nextPlayer identique au tien) ...
     // Trouve le prochain joueur vivant
     $stmt = $pdo->prepare("SELECT players_order FROM rooms WHERE id = ?");
     $stmt->execute([$room_id]);
@@ -70,7 +74,7 @@ try {
         $candidateIndex = ($currentIndex + $i) % $totalPlayers;
         $candidateId = $players_order[$candidateIndex];
 
-    // Vérifie si ce joueur est vivant
+        // Vérifie si ce joueur est vivant
         $stmt = $pdo->prepare("SELECT is_alive FROM players WHERE id = ? AND room_id = ?");
         $stmt->execute([$candidateId, $room_id]);
         $isAlive = $stmt->fetchColumn();
@@ -81,13 +85,12 @@ try {
         }
     }
 
-
     if ($nextPlayer) {
         $stmt = $pdo->prepare("UPDATE rooms SET current_turn = ? WHERE id = ?");
         $stmt->execute([$nextPlayer, $room_id]);
     }
 
-    // Vérifie si tous les joueurs vivants ont donné leur indice
+    // ... (Check voting identique) ...
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM players WHERE room_id = ? AND is_alive = 1");
     $stmt->execute([$room_id]);
     $totalAlive = $stmt->fetchColumn();
@@ -105,7 +108,6 @@ try {
         $stmt->execute([$room_id]);
     }
 
-    // Récupère le nouvel état
     $stmt = $pdo->prepare("SELECT state FROM rooms WHERE id = ?");
     $stmt->execute([$room_id]);
     $state = $stmt->fetchColumn();
@@ -117,15 +119,14 @@ try {
         'room_state' => $state
     ]);
 
-
 } catch (PDOException $e) {
-    // Gestion du doublon : le joueur a déjà soumis un indice
     if ($e->getCode() == 23000) {
         http_response_code(403);
         echo json_encode(['error' => 'Indice déjà soumis']);
     } else {
         http_response_code(500);
-        echo json_encode(['error' => 'Erreur serveur: ' . $e->getMessage()]);
+        echo json_encode(['error' => 'Erreur serveur']);
     }
     exit;
 }
+?>

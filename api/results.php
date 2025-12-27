@@ -3,39 +3,58 @@ session_start();
 require_once __DIR__ . '/../includes/db.php';
 
 $room_id = $_GET['room_id'] ?? null;
+if (!$room_id) die("Room ID manquant.");
 
-if (!$room_id) {
-    die("Room ID manquant.");
-}
+// 1. Compter les votes
+$stmt = $pdo->prepare("SELECT target_id, COUNT(*) as count FROM votes WHERE room_id = ? GROUP BY target_id ORDER BY count DESC");
+$stmt->execute([$room_id]);
+$votes = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-// Récupère les joueurs
+// 2. Noms des joueurs
 $stmt = $pdo->prepare("SELECT id, name FROM players WHERE room_id = ?");
 $stmt->execute([$room_id]);
-$players = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // id => name
+$players = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-// Récupère les votes
-$stmt = $pdo->prepare("SELECT target_id, COUNT(*) as vote_count FROM votes WHERE room_id = ? GROUP BY target_id");
-$stmt->execute([$room_id]);
-$votes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// 3. Identifier l'éliminé (CORRECTION ÉGALITÉ)
+$eliminatedIds = [];
+$tie = false;
 
-// Initialise le tableau des votes
-$voteCount = array_fill_keys(array_keys($players), 0);
-foreach ($votes as $vote) {
-    $voteCount[$vote['target_id']] = $vote['vote_count'];
+if (!empty($votes)) {
+    $maxVotes = max($votes);
+    
+    // On compte combien de joueurs ont le max de votes
+    $playersWithMax = 0;
+    foreach ($votes as $pid => $count) {
+        if ($count == $maxVotes) {
+            $playersWithMax++;
+            $eliminatedIds[] = $pid;
+        }
+    }
+
+    // Si plus d'un joueur a le max de votes, c'est une égalité -> Personne n'est éliminé
+    if ($playersWithMax > 1) {
+        $eliminatedIds = []; // On vide la liste des éliminés
+        $tie = true;
+    }
 }
 
-// Détermine les joueurs éliminés (ceux avec le plus de votes)
-$maxVotes = !empty($voteCount) ? max($voteCount) : 0;
-$eliminated = ($maxVotes > 0) ? array_keys($voteCount, $maxVotes) : [];
+// 4. Mettre à jour la DB
+if (!empty($eliminatedIds)) {
+    $placeholders = implode(',', array_fill(0, count($eliminatedIds), '?'));
+    $sql = "UPDATE players SET is_alive = 0 WHERE id IN ($placeholders)";
+    $pdo->prepare($sql)->execute($eliminatedIds);
+}
 
-// Stockage en session pour affichage dans results_view.php
+// 5. Sauvegarde Session
 $_SESSION['vote_results'] = [
+    'room_id' => $room_id,
     'players' => $players,
-    'vote_count' => $voteCount,
-    'eliminated' => $eliminated,
-    'room_id' => $room_id
+    'vote_count' => $votes,
+    'eliminated' => $eliminatedIds,
+    'is_tie' => $tie // Utile pour afficher "Égalité, personne ne sort !" dans la vue
 ];
 
-// Redirection vers la page d’animation
-header("Location: /results_view.php?room_id=" . urlencode($room_id));
+// 6. Redirection
+header("Location: /results_view.php?room_id=" . $room_id);
 exit;
+?>
